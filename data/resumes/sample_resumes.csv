@@ -1,0 +1,4 @@
+id,text
+alice,"Software developer with 3 years in Python, FastAPI, PostgreSQL, Docker, AWS. Built REST services and CI/CD pipelines with Jenkins and Git."
+bob,"Java developer experienced in Spring Boot, Microservices, MySQL, Kubernetes, and Azure. Implemented REST APIs and caching."
+charlie,"Frontend engineer React, TypeScript, Node.js. Some exposure to Flask and basic SQL. Interested in cloud and DevOps."
