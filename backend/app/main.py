@@ -30,6 +30,7 @@ class RankResponseItem(BaseModel):
     id: str
     score: float
     subscores: Dict[str, float]
+    skills_detail: Dict[str, List[str]]  # NEW
 
 class RankResponse(BaseModel):
     ranked: List[RankResponseItem]
@@ -51,3 +52,4 @@ def rank_resumes(req: RankRequest):
 def parse_resume(req: ParseRequest):
     text = parse_document_base64(req.content_base64)
     return {"text": sanitize_text(text)}
+
