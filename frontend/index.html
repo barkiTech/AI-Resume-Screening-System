@@ -1,6 +1,8 @@
 <!doctype html>
 <html>
 <head>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Resume Screening</title>
@@ -32,30 +34,130 @@
     </div>
     <button id="run">Rank</button>
     <div id="out"></div>
+    <canvas id="rankChart" style="margin-top: 20px; width: 100%; height: 200px;"></canvas>
+
+
   </div>
 
-  <script>
-    const API = "http://localhost:8000";
+ <script>
+  const API = "http://127.0.0.1:8000"; // ensure this matches your backend address
 
-    document.getElementById("run").onclick = async () => {
-      const job = document.getElementById("job").value.trim();
-      const resumes = document.getElementById("resumes").value.trim().split("\n").filter(Boolean)
-        .map((t,i)=>({id:`cv-${i+1}`, text:t}));
+  const out = document.getElementById("out");
+  function esc(s){ return (s??"").toString().replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])) }
+
+  document.getElementById("run").onclick = async () => {
+    const job = document.getElementById("job").value.trim();
+    const resumes = document.getElementById("resumes").value
+      .split("\n").map(s => s.trim()).filter(Boolean)
+      .map((t,i)=>({id:`cv-${i+1}`, text:t}));
+
+    if (!job || resumes.length === 0) {
+      out.innerHTML = "<p>Please paste a Job Description (left) and at least one resume (right).</p>";
+      return;
+    }
+
+    try {
       const resp = await fetch(API + "/rank", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
         body: JSON.stringify({job_text: job, resumes})
       });
+      if (!resp.ok) {
+        out.innerHTML = `<pre>Request failed: ${resp.status} ${resp.statusText}\n${esc(await resp.text())}</pre>`;
+        return;
+      }
       const data = await resp.json();
-      const out = document.getElementById("out");
-      if (!data.ranked) { out.innerHTML = "<p>Error. Check console.</p>"; return; }
-      let html = "<table><tr><th>ID</th><th>Score</th><th>Semantic</th><th>Keywords</th><th>Skills</th></tr>";
+      if (!data.ranked) {
+        out.innerHTML = `<pre>Unexpected response:\n${esc(JSON.stringify(data,null,2))}</pre>`;
+        return;
+      }
+
+      // Main ranking table
+      let html = "<h3>Ranked Results</h3>";
+      html += "<table><tr><th>ID</th><th>Score</th><th>Semantic</th><th>Keywords</th><th>Skills</th></tr>";
       for (const r of data.ranked) {
-        html += `<tr><td>${r.id}</td><td>${r.score}</td><td>${r.subscores.semantic}</td><td>${r.subscores.keywords}</td><td>${r.subscores.skills}</td></tr>`;
+        html += `<tr>
+          <td>${esc(r.id)}</td>
+          <td>${r.score}</td>
+          <td>${r.subscores.semantic}</td>
+          <td>${r.subscores.keywords}</td>
+          <td>${r.subscores.skills}</td>
+        </tr>`;
       }
       html += "</table>";
+
+      // Per-resume skill details (accordion style)
+      for (const r of data.ranked) {
+        const det = r.skills_detail || { matched:[], missing_from_resume:[], extras_in_resume:[] };
+        html += `
+          <div class="card" style="margin-top:10px;">
+            <details>
+              <summary><b>Skill details for ${esc(r.id)}</b></summary>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
+                <div style="flex:1;min-width:220px;">
+                  <h4 style="margin:6px 0;">Matched ✅</h4>
+                  <ul>${det.matched.map(s=>`<li>${esc(s)}</li>`).join("") || "<li>—</li>"}</ul>
+                </div>
+                <div style="flex:1;min-width:220px;">
+                  <h4 style="margin:6px 0;">Missing from Resume ❗</h4>
+                  <ul>${det.missing_from_resume.map(s=>`<li>${esc(s)}</li>`).join("") || "<li>—</li>"}</ul>
+                </div>
+                <div style="flex:1;min-width:220px;">
+                  <h4 style="margin:6px 0;">Extra in Resume 📝</h4>
+                  <ul>${det.extras_in_resume.map(s=>`<li>${esc(s)}</li>`).join("") || "<li>—</li>"}</ul>
+                </div>
+              </div>
+            </details>
+          </div>`;
+      }
+
       out.innerHTML = html;
-    };
-  </script>
+      // --- COLORFUL BAR CHART ---
+
+const labels = data.ranked.map(r => r.id);
+const scores = data.ranked.map(r => r.score * 100); // convert to %
+
+// Color mapping: High = Green, Mid = Yellow, Low = Red
+const colors = scores.map(s => 
+  s >= 70 ? "#27ae60" :       // Green
+  s >= 40 ? "#f1c40f" :       // Yellow
+           "#e74c3c"          // Red
+);
+
+const ctx = document.getElementById('rankChart').getContext('2d');
+
+if (window.rankChartInstance) {
+    window.rankChartInstance.destroy();
+}
+window.rankChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels,
+        datasets: [{
+            label: 'Match Score (%)',
+            data: scores,
+            backgroundColor: colors,
+            borderColor: "#ffffff",
+            borderWidth: 1
+        }]
+    },
+    options: {
+        scales: {
+            y: { beginAtZero: true, max: 100 }
+        },
+        plugins: {
+            legend: { display: false }
+        },
+        barPercentage: 0.6,
+        categoryPercentage: 0.6
+    }
+});
+
+    } catch (e) {
+      out.innerHTML = `<pre>Network error. Is the backend running at ${API}?\n${esc(e)}</pre>`;
+    }
+  };
+</script>
+
 </body>
 </html>
